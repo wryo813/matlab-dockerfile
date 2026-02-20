@@ -307,7 +307,7 @@ ZalaZONE_Automotive_Proving_Ground_Smart_City_Scene"
 ARG FONTS_PACKAGES="fonts-vlgothic ibus-mozc"
 
 # Specify the extra Ubuntu APT packages to install into the image.
-ARG ADDITIONAL_APT_PACKAGES="" 
+ARG ADDITIONAL_APT_PACKAGES=""
 
 # This Dockerfile builds on the Ubuntu-based mathworks/matlab image.
 # To check the available matlab images, see: https://hub.docker.com/r/mathworks/matlab
@@ -327,9 +327,9 @@ RUN export DEBIAN_FRONTEND=noninteractive \
     && apt-get update \
     && apt-get install --no-install-recommends --yes \
         wget \
+        ca-certificates \
         bzip2 \
         xz-utils \
-        ca-certificates \
         ${FONTS_PACKAGES} \
         ${ADDITIONAL_APT_PACKAGES} \
     && apt-get clean \
@@ -356,21 +356,6 @@ RUN wget -q https://www.mathworks.com/mpm/glnxa64/mpm \
     || (echo "MPM Installation Failure. See below for more information:" && cat /tmp/mathworks_root.log && false) \
     && sudo rm -rf mpm /tmp/mathworks_root.log
 
-# When running the container a license file can be mounted,
-# or a license server can be provided as an environment variable.
-# For more information, see https://hub.docker.com/r/mathworks/matlab
-
-# Alternatively, you can provide a license server to use
-# with the docker image while building the image.
-# Specify the host and port of the machine that serves the network licenses
-# if you want to bind in the license info as an environment variable.
-# You can also build with something like --build-arg LICENSE_SERVER=27000@MyServerName,
-# in which case you should uncomment the following two lines.
-# If these lines are uncommented, $LICENSE_SERVER must be a valid license
-# server or browser mode will not start successfully.
-# ARG LICENSE_SERVER
-# ENV MLM_LICENSE_FILE=$LICENSE_SERVER
-
 # The following environment variables allow MathWorks to understand how this MathWorks
 # product is being used. This information helps us make MATLAB even better.
 # Your content, and information about the content within your files, is not shared with MathWorks.
@@ -379,5 +364,23 @@ RUN wget -q https://www.mathworks.com/mpm/glnxa64/mpm \
 # https://github.com/mathworks-ref-arch/matlab-dockerfile#help-make-matlab-even-better
 ENV MW_DDUX_FORCE_ENABLE=true MW_CONTEXT_TAGS=$MW_CONTEXT_TAGS,MATLAB:TOOLBOXES:DOCKERFILE:V1
 
-WORKDIR /home/matlab
-# Inherit ENTRYPOINT and CMD from base image.
+# ==============================================================================
+# 以下、MATLAB Parallel Server の設定要件に基づく追加・修正箇所
+# ==============================================================================
+
+# 実行ユーザーを root に設定
+USER root
+
+# mjs_def.sh の編集 (オンラインライセンス設定)
+RUN EXISTING_MATLAB_LOCATION=$(dirname $(dirname $(readlink -f $(which matlab)))) \
+    && MJS_DEF_FILE="${EXISTING_MATLAB_LOCATION}/toolbox/parallel/bin/mjs_def.sh" \
+    && if [ -f "${MJS_DEF_FILE}" ]; then \
+           sed -i 's/^#*\s*USE_ONLINE_LICENSING=.*/USE_ONLINE_LICENSING="true"/' "${MJS_DEF_FILE}"; \
+       fi
+
+# 作業ディレクトリを /tmp に変更 (rootのDocumentsが存在しないことによるエラーを回避)
+WORKDIR /tmp
+
+# ベースイメージの ENTRYPOINT をリセットし、直接 bash で mjs を起動する
+ENTRYPOINT []
+CMD ["/bin/bash", "-c", "EXISTING_MATLAB_LOCATION=$(dirname $(dirname $(readlink -f $(which matlab)))) && ${EXISTING_MATLAB_LOCATION}/toolbox/parallel/bin/mjs start && tail -f /dev/null"]
