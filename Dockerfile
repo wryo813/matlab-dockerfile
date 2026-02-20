@@ -328,6 +328,8 @@ RUN export DEBIAN_FRONTEND=noninteractive \
     && apt-get install --no-install-recommends --yes \
         wget \
         ca-certificates \
+        bzip2 \
+        xz-utils \
         ${FONTS_PACKAGES} \
         ${ADDITIONAL_APT_PACKAGES} \
     && apt-get clean \
